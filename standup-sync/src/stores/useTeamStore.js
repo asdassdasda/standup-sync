@@ -5,6 +5,7 @@ import { generateId } from '../utils/idGenerator'
 import { useUserStore } from './useUserStore'
 import { useCrossTabSync } from '../composables/useCrossTabSync'
 import { teamWsService } from '../services/websocket/teamWsService'
+import { ElMessage } from 'element-plus'
 
 // Helper: call backend API, catch errors silently
 async function callApi(method, url, data) {
@@ -35,6 +36,9 @@ export const useTeamStore = defineStore('team', () => {
   const activeMembers = computed(() => members.value.filter(m => m.isActive !== false))
   const activeSprint = computed(() => sprints.value.find(s => s.isActive) || null)
   const sprintOptions = computed(() => sprints.value.map(s => ({ label: s.name, value: s.id })))
+  const totalPendingCount = computed(() => {
+    return Object.values(pendingAppsByTeam.value).reduce((sum, c) => sum + (c || 0), 0)
+  })
 
   // --- Cross-tab sync (BroadcastChannel) ---
   const { register: bcRegister, broadcast } = useCrossTabSync()
@@ -53,14 +57,73 @@ export const useTeamStore = defineStore('team', () => {
     _teamWsUnsubs.forEach(fn => fn())
     _teamWsUnsubs = [
       teamWsService.on(WS_MSG.TEAM_UPDATED, () => { fetchMyTeams() }),
-      teamWsService.on(WS_MSG.TEAM_MEMBER_JOINED, () => {
-        if (activeTeamId.value) loadMembers(activeTeamId.value)
+      teamWsService.on(WS_MSG.TEAM_MEMBER_JOINED, (p) => {
+        const tid = (p && p.teamId) || activeTeamId.value
+        if (tid) loadMembers(tid)
       }),
-      teamWsService.on(WS_MSG.TEAM_MEMBER_REMOVED, () => {
-        if (activeTeamId.value) loadMembers(activeTeamId.value)
+      teamWsService.on(WS_MSG.TEAM_MEMBER_REMOVED, (p) => {
+        const tid = (p && p.teamId) || activeTeamId.value
+        const removedUserId = p && p.userId
+        const myUid = useUserStore().currentUser?.id
+        if (removedUserId != null && String(removedUserId) === String(myUid)) {
+          // Current user was removed — refresh full team list
+          const teamName = (p && p.teamName) || ''
+          ElMessage.warning(teamName ? `你已被移出「${teamName}」` : '你已被移出团队')
+          teamWsService.disconnect()
+          fetchMyTeams().then(() => {
+            setTimeout(() => { window.location.reload() }, 500)
+          })
+          return
+        }
+        if (tid) loadMembers(tid)
       }),
-      teamWsService.on(WS_MSG.TEAM_MEMBER_ROLE, () => {
-        if (activeTeamId.value) loadMembers(activeTeamId.value)
+      teamWsService.on(WS_MSG.TEAM_MEMBER_ROLE, (p) => {
+        const tid = (p && p.teamId) || activeTeamId.value
+        if (tid) loadMembers(tid)
+      }),
+      // New application submitted — 团长 gets notification + badge + refresh
+      teamWsService.on(WS_MSG.TEAM_APPLY_SUBMITTED, (p) => {
+        const tid = p && p.teamId
+        const userName = (p && p.userName) || '有人'
+        const teamName = (p && p.teamName) || ''
+        if (tid) {
+          pendingAppsByTeam.value[tid] = (pendingAppsByTeam.value[tid] || 0) + 1
+          fetchApplications(tid)
+          ElMessage.info(`${userName} 申请加入「${teamName}」`)
+        }
+      }),
+      teamWsService.on(WS_MSG.TEAM_APPLY_APPROVED, (p) => {
+        const uid = p && p.uid
+        const tid = p && p.teamId
+        const myUid = useUserStore().currentUser?.id
+        const isMe = uid != null && String(uid) === String(myUid)
+        if (isMe) {
+          fetchMyTeams().then(() => {
+            if (tid) {
+              activeTeamId.value = tid
+              teamWsService.connect(tid)
+              loadMembers(tid)
+            }
+            ElMessage.success('你的入团申请已通过！')
+            // Force refresh current page to show new team
+            setTimeout(() => { window.location.reload() }, 500)
+          })
+        }
+        // Update badge (other users)
+        if (tid) {
+          pendingAppsByTeam.value[tid] = Math.max(0, (pendingAppsByTeam.value[tid] || 1) - 1)
+        }
+      }),
+      teamWsService.on(WS_MSG.TEAM_APPLY_REJECTED, (p) => {
+        const uid = p && p.uid
+        const tid = p && p.teamId
+        const myUid = useUserStore().currentUser?.id
+        if (uid != null && String(uid) === String(myUid)) {
+          ElMessage.warning('你的入团申请已被拒绝')
+        }
+        if (tid) {
+          pendingAppsByTeam.value[tid] = Math.max(0, (pendingAppsByTeam.value[tid] || 1) - 1)
+        }
       }),
       teamWsService.on(WS_MSG.TEAM_DISSOLVED, (payload) => {
         const tid = payload && payload.teamId
@@ -138,6 +201,8 @@ export const useTeamStore = defineStore('team', () => {
       if (activeTeamId.value) {
         teamWsService.connect(activeTeamId.value)
       }
+      // Fetch pending application counts for badge indicators
+      fetchAllPendingCounts()
     }
   }
   // 自检: ✅ 拉取后端团队列表, 自动选中第一个
@@ -153,9 +218,6 @@ export const useTeamStore = defineStore('team', () => {
       activeTeamId.value = team.id
       // 拉取成员列表
       await loadMembers(team.id)
-      // 更新用户角色为 Tech Lead（因为创建了团队）
-      const userStore = useUserStore()
-      if (userStore.currentUser) userStore.currentUser.role = 'tech_lead'
       // 初始化 Sprint
       if (!sprints.value.length) seedDefaultSprint()
       broadcast('team', 'teams-changed')
@@ -173,46 +235,80 @@ export const useTeamStore = defineStore('team', () => {
   // 自检: ✅ 先调后端, 成功则同步数据, 失败走本地兜底
 
   // ========================================================
-  // 3. 通过邀请码加入团队 — POST /api/teams/join?inviteCode=xxx
+  // 3. 申请加入团队（提交审核） — POST /api/teams/join?inviteCode=xxx
   // ========================================================
-  async function joinTeam(code) {
+  async function applyToJoin(code) {
     if (!/^\d{6}$/.test(code)) return { success: false, message: '邀请码格式错误，请输入6位数字' }
-    loading.value = true
-
-    // 调用后端
     const res = await callApi('POST', `/teams/join?inviteCode=${code}`)
-    if (res && res.code === 200 && res.data) {
-      const team = res.data
-      if (!teams.value.find(t => t.id === team.id)) teams.value.push(team)
-      activeTeamId.value = team.id
-      await loadMembers(team.id)
-      loading.value = false
-      broadcast('team', 'teams-changed')
-      return { success: true }
+    if (res && res.code === 200) {
+      // Connect to team WS so applicant receives approval notification
+      if (res.data && res.data.teamId) {
+        teamWsService.connect(res.data.teamId)
+      }
+      return { success: true, message: '申请已提交，等待团长审核' }
     }
-
-    // 离线兜底
-    const userStore = useUserStore()
-    const existing = teams.value.find(t => t.inviteCode === code)
-    if (existing) {
-      const dup = members.value.find(m => m.id === userStore.currentUser?.id)
-      if (dup) { loading.value = false; return { success: false, message: '你已经是团队成员' } }
-      activeTeamId.value = existing.id
-      members.value.push(localMember())
-      loading.value = false
-      broadcast('team', 'teams-changed')
-      return { success: true }
-    }
-    // 创建演示团队
-    const team = { id: generateId('team_'), name: '演示团队', inviteCode: code, maxMembers: 10, createdAt: new Date().toISOString() }
-    teams.value.push(team)
-    activeTeamId.value = team.id
-    members.value = [localMember()]
-    loading.value = false
-    broadcast('team', 'teams-changed')
-    return { success: true }
+    return { success: false, message: res ? res.msg : '网络错误' }
   }
-  // 自检: ✅ 验证格式 → 调后端 → 防重复 → 兜底
+
+  // ========================================================
+  // 3b. 获取待审核申请列表（团长 only）
+  // ========================================================
+  const applications = ref([])
+  const pendingAppsByTeam = ref({})  // { [teamId]: count }
+
+  async function fetchApplications(teamId) {
+    const tid = teamId || currentTeam.value?.id
+    if (!tid) return
+    const res = await callApi('GET', `/teams/${tid}/applications`)
+    if (res && res.code === 200) {
+      applications.value = res.data || []
+      pendingAppsByTeam.value[tid] = applications.value.length
+    }
+  }
+
+  // Fetch pending counts for all teams where user is 团长
+  async function fetchAllPendingCounts() {
+    for (const t of teams.value) {
+      try {
+        const res = await callApi('GET', `/teams/${t.id}/applications`)
+        if (res && res.code === 200) {
+          pendingAppsByTeam.value[t.id] = (res.data || []).length
+        }
+      } catch { /* skip */ }
+    }
+  }
+
+  async function approveApplication(appId) {
+    const tid = currentTeam.value?.id
+    if (!tid) return { success: false }
+    const res = await callApi('POST', `/teams/${tid}/applications/${appId}/approve`)
+    if (res && res.code === 200) {
+      // Immediately remove from local list using splice
+      const idx = applications.value.findIndex(a => String(a.id) === String(appId))
+      if (idx > -1) applications.value.splice(idx, 1)
+      // Update badge
+      pendingAppsByTeam.value[tid] = Math.max(0, (pendingAppsByTeam.value[tid] || 1) - 1)
+      await loadMembers(tid)
+      broadcast('team', 'members-changed', { teamId: tid })
+      return { success: true }
+    }
+    return { success: false, message: res?.msg }
+  }
+
+  async function rejectApplication(appId) {
+    const tid = currentTeam.value?.id
+    if (!tid) return { success: false }
+    const res = await callApi('POST', `/teams/${tid}/applications/${appId}/reject`)
+    if (res && res.code === 200) {
+      // Immediately remove from local list using splice
+      const idx = applications.value.findIndex(a => String(a.id) === String(appId))
+      if (idx > -1) applications.value.splice(idx, 1)
+      // Update badge
+      pendingAppsByTeam.value[tid] = Math.max(0, (pendingAppsByTeam.value[tid] || 1) - 1)
+      return { success: true }
+    }
+    return { success: false, message: res?.msg }
+  }
 
   // ========================================================
   // 4. 删除团队 (Tech Lead) — POST /api/teams/{id}/dissolve
@@ -256,25 +352,32 @@ export const useTeamStore = defineStore('team', () => {
   // ========================================================
   async function removeMember(memberId) {
     const teamId = currentTeam.value?.id
-    if (!teamId) return
-    await callApi('DELETE', `/teams/${teamId}/members/${memberId}`)
-    // 本地标记移除
-    const member = members.value.find(m => m.id === memberId)
-    if (member) member.isActive = false
-    broadcast('team', 'members-changed', { teamId })
+    if (!teamId) return { success: false, message: '未选择团队' }
+    const res = await callApi('DELETE', `/teams/${teamId}/members/${memberId}`)
+    if (res && res.code === 200) {
+      // Immediately remove from local list
+      const idx = members.value.findIndex(m => m.id === memberId)
+      if (idx > -1) members.value.splice(idx, 1)
+      broadcast('team', 'members-changed', { teamId })
+      return { success: true }
+    }
+    return { success: false, message: res?.msg || '移除失败' }
   }
-  // 自检: ✅ 先调后端, 再本地标记 isActive=false (保留只读历史)
 
   // ========================================================
   // 8. 修改成员角色 (Tech Lead) — PUT /api/teams/{teamId}/members/{id}/role?role=xxx
   // ========================================================
   async function changeMemberRole(memberId, newRole) {
     const teamId = currentTeam.value?.id
-    if (!teamId) return
-    await callApi('PUT', `/teams/${teamId}/members/${memberId}/role?role=${newRole}`)
-    const member = members.value.find(m => m.id === memberId)
-    if (member) member.role = newRole
-    broadcast('team', 'members-changed', { teamId })
+    if (!teamId) return { success: false, message: '未选择团队' }
+    const res = await callApi('PUT', `/teams/${teamId}/members/${memberId}/role?role=${newRole}`)
+    if (res && res.code === 200) {
+      const member = members.value.find(m => m.id === memberId)
+      if (member) member.role = newRole
+      broadcast('team', 'members-changed', { teamId })
+      return { success: true }
+    }
+    return { success: false, message: res?.msg || '更新失败' }
   }
   // 自检: ✅ 先调后端更新角色, 再本地同步
 
@@ -337,20 +440,21 @@ export const useTeamStore = defineStore('team', () => {
 
   function seedLocalMember() {
     const u = useUserStore()
-    members.value = [{ id: u.currentUser?.id || generateId('m_'), name: u.currentUser?.name || '创始人', role: ROLES.TECH_LEAD, joinedAt: new Date().toISOString(), isActive: true }]
+    members.value = [{ id: u.currentUser?.id || generateId('m_'), name: u.currentUser?.name || '创始人', role: ROLES.MASTER, joinedAt: new Date().toISOString(), isActive: true }]
   }
 
   function localMember() {
     const u = useUserStore()
-    return { id: u.currentUser?.id || generateId('m_'), name: u.currentUser?.name || '新成员', role: ROLES.DEVELOPER, joinedAt: new Date().toISOString(), isActive: true }
+    return { id: u.currentUser?.id || generateId('m_'), name: u.currentUser?.name || '新成员', role: ROLES.MEMBER, joinedAt: new Date().toISOString(), isActive: true }
   }
 
   return {
     teams, activeTeamId, members, sprints, loading,
-    currentTeam, activeMembers, activeSprint, sprintOptions,
-    fetchMyTeams, createTeam, joinTeam, deleteTeam, switchTeam,
+    currentTeam, activeMembers, activeSprint, sprintOptions, applications, pendingAppsByTeam, totalPendingCount,
+    fetchMyTeams, createTeam, applyToJoin, deleteTeam, switchTeam,
     loadMembers, removeMember, changeMemberRole, regenerateInviteCode,
-    updateTeamName, leaveTeam, createSprint
+    updateTeamName, leaveTeam, createSprint,
+    fetchApplications, approveApplication, rejectApplication, fetchAllPendingCounts
   }
 }, {
   persist: { key: 'team', pick: ['teams', 'activeTeamId', 'sprints'] }

@@ -5,15 +5,13 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("team_member")
-public class TeamMember {
+@TableName("team_apply")
+public class TeamApply {
     @TableId(type = IdType.AUTO)
     private Long id;
     private Long teamId;
-    private Long userId;
-    private Integer role;
-    private String inviteCode;
-    private LocalDateTime joinedAt;
+    private Long uid;
+    private Integer status;
     @TableLogic
     private Integer deleted;
     private LocalDateTime createTime;

@@ -90,8 +90,8 @@ public class StandupService {
         // Only Scrum Master or Tech Lead can start
         TeamMember tm = teamMemberMapper.selectOne(new LambdaQueryWrapper<TeamMember>()
                 .eq(TeamMember::getTeamId, meeting.getTeamId()).eq(TeamMember::getUserId, userId));
-        if (tm == null || ("developer".equals(tm.getRole()) || "observer".equals(tm.getRole())))
-            return Result.fail("只有SM或Tech Lead可以开启站会");
+        if (tm == null || (tm.getRole() == null || tm.getRole() == 0))
+            return Result.fail("只有团长或管理员可以开启站会");
 
         meeting.setStatus("active");
         meeting.setCountdownEndAt(LocalDateTime.now().plusSeconds(900));

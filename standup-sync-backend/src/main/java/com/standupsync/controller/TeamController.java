@@ -22,7 +22,22 @@ public class TeamController {
 
     @PostMapping("/join")
     public Result<?> join(@RequestParam String inviteCode, Authentication auth) {
-        return teamService.joinTeam(inviteCode, (Long) auth.getPrincipal());
+        return teamService.applyToJoin(inviteCode, (Long) auth.getPrincipal());
+    }
+
+    @GetMapping("/{teamId}/applications")
+    public Result<?> applications(@PathVariable Long teamId, Authentication auth) {
+        return teamService.getApplications(teamId, (Long) auth.getPrincipal());
+    }
+
+    @PostMapping("/{teamId}/applications/{appId}/approve")
+    public Result<?> approve(@PathVariable Long teamId, @PathVariable Long appId, Authentication auth) {
+        return teamService.approveApplication(teamId, appId, (Long) auth.getPrincipal());
+    }
+
+    @PostMapping("/{teamId}/applications/{appId}/reject")
+    public Result<?> reject(@PathVariable Long teamId, @PathVariable Long appId, Authentication auth) {
+        return teamService.rejectApplication(teamId, appId, (Long) auth.getPrincipal());
     }
 
     @GetMapping("/{teamId}/members")
@@ -32,7 +47,7 @@ public class TeamController {
 
     @PutMapping("/{teamId}/members/{memberId}/role")
     public Result<?> changeRole(@PathVariable Long teamId, @PathVariable Long memberId,
-                                @RequestParam String role, Authentication auth) {
+                                @RequestParam Integer role, Authentication auth) {
         return teamService.changeRole(teamId, memberId, role, (Long) auth.getPrincipal());
     }
 

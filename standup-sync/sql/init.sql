@@ -49,13 +49,13 @@ CREATE TABLE `team` (
 -- ============================================================
 -- 3. 团队成员关联表 team_member
 -- ============================================================
--- 角色枚举: tech_lead / scrum_master / developer / observer
+-- 角色: 2=团长 1=管理员 0=普通团员
 -- ============================================================
 CREATE TABLE `team_member` (
   `id`            BIGINT        NOT NULL AUTO_INCREMENT  COMMENT '主键ID',
   `team_id`       BIGINT        NOT NULL                 COMMENT '团队ID',
   `user_id`       BIGINT        NOT NULL                 COMMENT '用户ID',
-  `role`          VARCHAR(32)   NOT NULL DEFAULT 'developer' COMMENT '角色 tech_lead/scrum_master/developer/observer',
+  `role`          TINYINT       NOT NULL DEFAULT 0       COMMENT '角色 2团长 1管理员 0团员',
   `invite_code`   CHAR(6)       DEFAULT ''               COMMENT '加入时使用的邀请码(冗余)',
   `joined_at`     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '加入时间',
   `deleted`       TINYINT(1)    NOT NULL DEFAULT 0       COMMENT '逻辑删除 0未删 1已删',
@@ -67,6 +67,23 @@ CREATE TABLE `team_member` (
   KEY `idx_role` (`role`),
   KEY `idx_deleted` (`deleted`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='团队成员关联表';
+
+
+-- ============================================================
+-- 3b. 入团申请表 team_apply
+-- status: 0=待审核 1=通过 2=拒绝
+-- ============================================================
+CREATE TABLE `team_apply` (
+  `id`            BIGINT        NOT NULL AUTO_INCREMENT  COMMENT '主键ID',
+  `team_id`       BIGINT        NOT NULL                 COMMENT '团队ID',
+  `uid`           BIGINT        NOT NULL                 COMMENT '申请人用户ID',
+  `status`        TINYINT       NOT NULL DEFAULT 0       COMMENT '0待审核 1通过 2拒绝',
+  `deleted`       TINYINT(1)    NOT NULL DEFAULT 0       COMMENT '逻辑删除',
+  `create_time`   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time`   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_team_status` (`team_id`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='入团申请表';
 
 
 -- ============================================================

@@ -7,27 +7,24 @@ export const useUserStore = defineStore('user', () => {
   const authToken = ref(null)
 
   const isAuthenticated = computed(() => !!currentUser.value && !!authToken.value)
-  const isTechLead = computed(() => currentUser.value?.role === ROLES.TECH_LEAD)
-  const isScrumMaster = computed(() => currentUser.value?.role === ROLES.SCRUM_MASTER)
 
   function login(name, password) {
-    // Mock login - accept any non-empty credentials
     if (!name || !password) {
       return { success: false, message: '请输入用户名和密码' }
     }
     const users = {
-      '张三': { id: 'u1', name: '张三', role: ROLES.TECH_LEAD },
-      '李四': { id: 'u2', name: '李四', role: ROLES.SCRUM_MASTER },
-      '王五': { id: 'u3', name: '王五', role: ROLES.DEVELOPER },
-      '赵六': { id: 'u4', name: '赵六', role: ROLES.DEVELOPER },
-      '钱七': { id: 'u5', name: '钱七', role: ROLES.OBSERVER }
+      '张三': { id: 'u1', name: '张三', role: ROLES.MASTER },
+      '李四': { id: 'u2', name: '李四', role: ROLES.ADMIN },
+      '王五': { id: 'u3', name: '王五', role: ROLES.MEMBER },
+      '赵六': { id: 'u4', name: '赵六', role: ROLES.MEMBER },
+      '钱七': { id: 'u5', name: '钱七', role: ROLES.MEMBER }
     }
     if (users[name]) {
       currentUser.value = users[name]
       authToken.value = `mock-token-${users[name].id}-${Date.now()}`
       return { success: true }
     }
-    currentUser.value = { id: `u${Date.now()}`, name, role: ROLES.DEVELOPER }
+    currentUser.value = { id: `u${Date.now()}`, name, role: ROLES.MEMBER }
     authToken.value = `mock-token-new-${Date.now()}`
     return { success: true }
   }
@@ -37,11 +34,11 @@ export const useUserStore = defineStore('user', () => {
     authToken.value = null
   }
 
-  return { currentUser, authToken, isAuthenticated, isTechLead, isScrumMaster, login, logout }
+  return { currentUser, authToken, isAuthenticated, login, logout }
 }, {
   persist: {
     key: 'user',
-    storage: sessionStorage,  // 每个标签页独立会话，支持多用户同时登录测试
+    storage: sessionStorage,
     pick: ['currentUser', 'authToken']
   }
 })

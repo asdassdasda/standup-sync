@@ -94,7 +94,7 @@ async function handleLogin() {
     loading.value = false
     if (res.code === 200) {
       const d = res.data
-      const currentUser = { id: String(d.userId), name: loginForm.name, role: 'developer' }
+      const currentUser = { id: String(d.userId), name: loginForm.name, role: 0 }
       const authToken = d.token
       sessionStorage.setItem('user', JSON.stringify({ currentUser, authToken }))
       userStore.$patch({ currentUser, authToken })

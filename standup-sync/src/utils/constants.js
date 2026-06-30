@@ -1,16 +1,14 @@
-// 用户角色
+// 用户角色（数值型，对齐后端 team_member.role TINYINT）
 export const ROLES = {
-  TECH_LEAD: 'tech_lead',
-  SCRUM_MASTER: 'scrum_master',
-  DEVELOPER: 'developer',
-  OBSERVER: 'observer'
+  MASTER: 2,
+  ADMIN: 1,
+  MEMBER: 0
 }
 
 export const ROLE_LABELS = {
-  [ROLES.TECH_LEAD]: '团长',
-  [ROLES.SCRUM_MASTER]: '主持人',
-  [ROLES.DEVELOPER]: '开发者',
-  [ROLES.OBSERVER]: '观察者'
+  [ROLES.MASTER]: '团长',
+  [ROLES.ADMIN]: '管理员',
+  [ROLES.MEMBER]: '普通团员'
 }
 
 // 优先级
@@ -127,6 +125,9 @@ export const WS_MSG = {
   TEAM_MEMBER_REMOVED: 'team:member:removed',
   TEAM_MEMBER_ROLE:    'team:member:role-changed',
   TEAM_DISSOLVED:      'team:dissolved',
+  TEAM_APPLY_SUBMITTED: 'team:apply:submitted',
+  TEAM_APPLY_APPROVED: 'team:apply:approved',
+  TEAM_APPLY_REJECTED: 'team:apply:rejected',
   STANDUP_CREATED:     'standup:created',
   STANDUP_LIST_CHANGED:'standup:list-changed',
   STANDUP_LIVE_STATE:  'standup:live-state',

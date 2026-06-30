@@ -27,7 +27,10 @@
             @click="viewTeam(t)">
             <div class="team-card-body">
               <div class="team-card-header">
-                <h3>{{ t.name }}</h3>
+                <h3>
+                  {{ t.name }}
+                  <el-badge v-if="teamStore.pendingAppsByTeam[t.id]" :value="teamStore.pendingAppsByTeam[t.id]" class="pending-badge" />
+                </h3>
                 <el-tag size="small" :type="viewedTeamId === t.id ? 'success' : 'info'">
                   {{ viewedTeamId === t.id ? '查看中' : '点击查看' }}
                 </el-tag>
@@ -68,20 +71,21 @@
           <el-table-column label="角色" width="180">
             <template #default="scope">
               <el-select
-                v-if="userStore.isTechLead && scope.row.userId !== userStore.currentUser?.id"
-                :model-value="scope.row.role"
+                v-if="isMaster && String(scope.row.userId) !== String(userStore.currentUser?.id)"
+                :model-value="Number(scope.row.role ?? 0)"
                 @change="handleRoleChange(scope.row, $event)"
                 size="small"
+                placeholder="选择角色"
               >
                 <el-option v-for="r in roleOptions" :key="r.value" :label="r.label" :value="r.value" />
               </el-select>
-              <el-tag v-else>{{ getRoleLabel(scope.row.role) }}</el-tag>
+              <el-tag v-else :type="scope.row.role === ROLES.MASTER ? 'danger' : scope.row.role === ROLES.ADMIN ? 'warning' : 'info'">{{ getRoleLabel(scope.row.role) }}</el-tag>
             </template>
           </el-table-column>
           <el-table-column prop="joinedAt" label="加入时间" width="180">
             <template #default="scope">{{ formatDateTime(scope.row.joinedAt) }}</template>
           </el-table-column>
-          <el-table-column label="操作" width="100" v-if="userStore.isTechLead">
+          <el-table-column label="操作" width="100" v-if="isMaster">
             <template #default="scope">
               <el-button
                 v-if="String(scope.row.userId) !== String(userStore.currentUser?.id)"
@@ -90,6 +94,29 @@
             </template>
           </el-table-column>
         </el-table>
+
+        <!-- 入团申请 (团长 only) -->
+        <div v-if="isMaster" style="margin-top: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <span style="font-weight: 600;">入团申请</span>
+            <el-button size="small" @click="teamStore.fetchApplications()" :loading="loadingApps">刷新</el-button>
+          </div>
+          <el-table :data="teamStore.applications" border v-if="teamStore.applications.length">
+            <el-table-column label="申请人">
+              <template #default="scope">{{ scope.row.name || '用户' + scope.row.uid }}</template>
+            </el-table-column>
+            <el-table-column label="申请时间" width="180">
+              <template #default="scope">{{ formatDateTime(scope.row.createTime) }}</template>
+            </el-table-column>
+            <el-table-column label="操作" width="200">
+              <template #default="scope">
+                <el-button type="success" size="small" @click="handleApprove(scope.row.id)">通过</el-button>
+                <el-button type="danger" size="small" @click="handleReject(scope.row.id)">拒绝</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+          <el-empty v-else description="没有待审核的申请" :image-size="40" />
+        </div>
       </el-card>
 
       <!-- Sprints -->
@@ -220,7 +247,7 @@ import { useUserStore } from '../stores/useUserStore'
 import { useTeamStore } from '../stores/useTeamStore'
 import { ROLES, ROLE_LABELS } from '../utils/constants'
 import { formatDate, formatDateTime } from '../utils/formatters'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 const route = useRoute()
 const userStore = useUserStore()
@@ -231,6 +258,19 @@ const viewedTeamId = ref(null)
 async function viewTeam(team) {
   viewedTeamId.value = team.id
   await teamStore.switchTeam(team.id)
+  teamStore.fetchApplications(team.id)
+}
+
+const loadingApps = ref(false)
+async function handleApprove(appId) {
+  const res = await teamStore.approveApplication(appId)
+  if (res.success) ElMessage.success('已通过')
+  else ElMessage.error(res.message || '操作失败')
+}
+async function handleReject(appId) {
+  const res = await teamStore.rejectApplication(appId)
+  if (res.success) ElMessage.success('已拒绝')
+  else ElMessage.error(res.message || '操作失败')
 }
 
 const showCreateDialog = ref(false)
@@ -250,6 +290,17 @@ const leaveTarget = ref(null)
 const deleteTarget = ref(null)
 const editTarget = ref(null)
 
+// Current user's role in the viewed team (2=团长 1=管理员 0=团员)
+const myRoleInTeam = computed(() => {
+  const uid = userStore.currentUser?.id
+  if (!uid) return null
+  const m = teamStore.activeMembers.find(m =>
+    String(m.userId) === String(uid) || String(m.id) === String(uid)
+  )
+  return m?.role != null ? m.role : null
+})
+const isMaster = computed(() => myRoleInTeam.value === ROLES.MASTER)
+
 const newSprint = reactive({ name: '', startDate: null, endDate: null })
 
 const roleOptions = Object.entries(ROLES).map(([key, value]) => ({
@@ -266,18 +317,6 @@ function getRoleLabel(role) {
 }
 
 function handleCreateTeamClick() {
-  // Only allow if user has no team (first team) or is Tech Lead
-  if (!teamStore.teams.length) {
-    showCreateDialog.value = true
-    return
-  }
-  const myRole = teamStore.activeMembers.find(m =>
-    String(m.userId) === String(userStore.currentUser?.id)
-  )?.role
-  if (myRole !== 'tech_lead') {
-    ElMessage.error('只有团长才能创建新团队')
-    return
-  }
   showCreateDialog.value = true
 }
 
@@ -291,19 +330,31 @@ async function handleCreateTeam() {
 }
 
 async function handleJoinTeam() {
-  const result = await teamStore.joinTeam(inviteCode.value)
+  const result = await teamStore.applyToJoin(inviteCode.value)
   if (result.success) {
     showJoinDialog.value = false
     inviteCode.value = ''
-    ElMessage.success('加入成功')
+    ElMessage.success(result.message || '申请已提交，等待团长审核')
   } else {
-    ElMessage.error(result.message)
+    ElMessage.error(result.message || '申请失败')
   }
 }
 
-function handleRoleChange(member, newRole) {
-  teamStore.changeMemberRole(member.id, newRole)
-  ElMessage.success('角色已更新')
+async function handleRoleChange(member, newRole) {
+  const roleLabel = ROLE_LABELS[newRole] || newRole
+  try {
+    await ElMessageBox.confirm(
+      `确定将 ${member.name || '用户' + member.userId} 的角色改为「${roleLabel}」？`,
+      '确认更改角色',
+      { confirmButtonText: '确认', cancelButtonText: '取消', type: 'warning' }
+    )
+    const result = await teamStore.changeMemberRole(member.id, newRole)
+    if (result && result.success !== false) {
+      ElMessage.success('角色已更新')
+    } else {
+      ElMessage.error(result?.message || '更新失败')
+    }
+  } catch { /* user cancelled */ }
 }
 
 function handleRemoveClick(member) {
@@ -311,11 +362,15 @@ function handleRemoveClick(member) {
   showRemoveDialog.value = true
 }
 
-function handleRemoveMember() {
+async function handleRemoveMember() {
   if (memberToRemove.value) {
-    teamStore.removeMember(memberToRemove.value.id)
+    const result = await teamStore.removeMember(memberToRemove.value.id)
     showRemoveDialog.value = false
-    ElMessage.success('成员已移除')
+    if (result && result.success) {
+      ElMessage.success('成员已移除')
+    } else {
+      ElMessage.error(result?.message || '移除失败')
+    }
   }
 }
 
@@ -378,12 +433,14 @@ async function handleDeleteTeam() {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
+  // Ensure team data is fresh and WS is connected for real-time sync
+  await teamStore.fetchMyTeams()
   // Auto-join via invite link
   const code = route.query.code
   if (code && !teamStore.teams.find(t => t.inviteCode === code)) {
-    teamStore.joinTeam(code).then(r => {
-      if (r.success) ElMessage.success('已通过邀请链接加入团队')
+    teamStore.applyToJoin(code).then(r => {
+      if (r.success) ElMessage.success(r.message || '已通过邀请链接提交申请')
     })
   }
   // Auto-view first team

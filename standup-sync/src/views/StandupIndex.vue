@@ -133,7 +133,7 @@ import { useRouter } from 'vue-router'
 import { useStandupStore } from '../stores/useStandupStore'
 import { useTeamStore } from '../stores/useTeamStore'
 import { useUserStore } from '../stores/useUserStore'
-import { ROLE_LABELS } from '../utils/constants'
+import { ROLES, ROLE_LABELS } from '../utils/constants'
 import { formatDate, formatDateTime, formatDuration } from '../utils/formatters'
 import { parseChatLog } from '../composables/usePasteChat'
 import { ElMessage } from 'element-plus'
@@ -162,11 +162,11 @@ const defaultSprintOptions = [
 ]
 
 const defaultMembers = [
-  { id: 1, userId: 1, name: '张三', role: 'tech_lead' },
-  { id: 2, userId: 2, name: '李四', role: 'scrum_master' },
-  { id: 3, userId: 3, name: '王五', role: 'developer' },
-  { id: 4, userId: 4, name: '赵六', role: 'developer' },
-  { id: 5, userId: 5, name: '钱七', role: 'observer' }
+  { id: 1, userId: 1, name: '张三', role: ROLES.MASTER },
+  { id: 2, userId: 2, name: '李四', role: ROLES.ADMIN },
+  { id: 3, userId: 3, name: '王五', role: ROLES.MEMBER },
+  { id: 4, userId: 4, name: '赵六', role: ROLES.MEMBER },
+  { id: 5, userId: 5, name: '钱七', role: ROLES.MEMBER }
 ]
 
 const stats = computed(() => {
@@ -179,16 +179,16 @@ const stats = computed(() => {
   return { monthlyCount, attendanceRate, completionRate, activeBlockers }
 })
 
-// Check team membership role (use == for string/number comparison)
+// Check team membership role (int: 2=团长 1=管理员 0=团员)
 const myTeamRole = computed(() => {
   const uid = userStore.currentUser?.id
-  if (!uid) return 'developer'
+  if (!uid) return ROLES.MEMBER
   const m = teamStore.activeMembers.find(m => String(m.userId) === String(uid) || String(m.id) === String(uid))
-  return m?.role || userStore.currentUser?.role || 'developer'
+  return m?.role != null ? m.role : ROLES.MEMBER
 })
 
 const canCreateStandup = computed(() => {
-  return myTeamRole.value === 'tech_lead'
+  return myTeamRole.value === ROLES.MASTER
 })
 
 const activeStandups = computed(() => {
@@ -279,7 +279,7 @@ async function handleCreate() {
   const myRole = teamStore.activeMembers.find(m =>
     String(m.userId) === String(uid) || String(m.id) === String(uid)
   )?.role || userStore.currentUser?.role
-  if (myRole !== 'tech_lead') {
+  if (myRole !== ROLES.MASTER) {
     ElMessage.error('没有权限：仅团长可创建站会')
     return
   }

@@ -221,7 +221,7 @@ import { useRouter } from 'vue-router'
 import { useStandupStore } from '../stores/useStandupStore'
 import { useTeamStore } from '../stores/useTeamStore'
 import { useUserStore } from '../stores/useUserStore'
-import { SPEAKER_STATUS, ROLE_LABELS } from '../utils/constants'
+import { SPEAKER_STATUS, ROLES, ROLE_LABELS } from '../utils/constants'
 import { parseChatLog } from '../composables/usePasteChat'
 import { ElMessage } from 'element-plus'
 import ThreeColumnInput from '../components/standup/ThreeColumnInput.vue'
@@ -284,7 +284,7 @@ const canStart = computed(() => {
   const myRole = teamStore.activeMembers.find(m =>
     String(m.userId) === String(uid) || String(m.id) === String(uid)
   )?.role || userStore.currentUser?.role
-  return myRole === 'tech_lead' || myRole === 'scrum_master' ||
+  return myRole === ROLES.MASTER || myRole === ROLES.ADMIN ||
     (meeting.createdBy && String(meeting.createdBy) === String(uid))
 })
 

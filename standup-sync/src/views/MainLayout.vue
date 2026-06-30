@@ -27,6 +27,7 @@
         <el-menu-item index="/team">
           <el-icon><User /></el-icon>
           <span>团队</span>
+          <el-badge v-if="teamStore.totalPendingCount" :value="teamStore.totalPendingCount" style="margin-left: 8px;" />
         </el-menu-item>
         <el-menu-item index="/setting">
           <el-icon><Setting /></el-icon>
@@ -89,7 +90,9 @@ const teamStore = useTeamStore()
 
 onMounted(() => {
   if (userStore.isAuthenticated) {
-    teamStore.fetchMyTeams()
+    teamStore.fetchMyTeams().then(() => {
+      teamStore.fetchAllPendingCounts()
+    })
   }
 })
 
