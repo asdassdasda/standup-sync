@@ -20,8 +20,8 @@ public class StandupController {
     }
 
     @GetMapping
-    public Result<?> list(@RequestParam Long teamId) {
-        return standupService.getStandupList(teamId);
+    public Result<?> list(@RequestParam Long teamId, Authentication auth) {
+        return standupService.getStandupList(teamId, (Long) auth.getPrincipal());
     }
 
     @PostMapping
@@ -35,8 +35,8 @@ public class StandupController {
     }
 
     @GetMapping("/{id}")
-    public Result<?> detail(@PathVariable Long id) {
-        return standupService.getStandupDetail(id);
+    public Result<?> detail(@PathVariable Long id, Authentication auth) {
+        return standupService.getStandupDetail(id, (Long) auth.getPrincipal());
     }
 
     @PostMapping("/{id}/speeches")
@@ -50,30 +50,31 @@ public class StandupController {
     }
 
     @PostMapping("/{id}/paste")
-    public Result<?> paste(@PathVariable Long id, @RequestBody String text) {
-        return standupService.pasteChatLog(id, text);
+    public Result<?> paste(@PathVariable Long id, @RequestBody String text, Authentication auth) {
+        return standupService.pasteChatLog(id, text, (Long) auth.getPrincipal());
     }
 
     @PostMapping("/{id}/summary/generate")
-    public Result<?> generateSummary(@PathVariable Long id) {
-        return standupService.generateAISummary(id);
+    public Result<?> generateSummary(@PathVariable Long id, Authentication auth) {
+        return standupService.generateAISummary(id, (Long) auth.getPrincipal());
     }
 
     @GetMapping("/{id}/summary")
-    public Result<?> getSummary(@PathVariable Long id) {
-        return standupService.getSummary(id);
+    public Result<?> getSummary(@PathVariable Long id, Authentication auth) {
+        return standupService.getSummary(id, (Long) auth.getPrincipal());
     }
 
     @PutMapping("/summary/items/{itemId}")
     public Result<?> updateActionItem(@PathVariable Long itemId, @RequestParam(required = false) String content,
-                                      @RequestParam(required = false) String priority, @RequestParam(required = false) Long assigneeId) {
-        return standupService.updateActionItem(itemId, content, priority, assigneeId);
+                                      @RequestParam(required = false) String priority, @RequestParam(required = false) Long assigneeId,
+                                      Authentication auth) {
+        return standupService.updateActionItem(itemId, content, priority, assigneeId, (Long) auth.getPrincipal());
     }
 
     @PostMapping("/{id}/classify")
-    public Result<?> classifyText(@PathVariable Long id, @RequestBody Map<String, String> body) {
+    public Result<?> classifyText(@PathVariable Long id, @RequestBody Map<String, String> body, Authentication auth) {
         String text = body.get("text");
         if (text == null || text.trim().isEmpty()) return Result.fail("文本为空");
-        return standupService.classifyText(text);
+        return standupService.classifyText(text, (Long) auth.getPrincipal());
     }
 }

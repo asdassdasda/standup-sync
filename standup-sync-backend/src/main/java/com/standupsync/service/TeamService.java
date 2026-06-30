@@ -69,6 +69,10 @@ public class TeamService {
         return role != null && role == ROLE_MASTER;
     }
 
+    private boolean isMember(Long teamId, Long userId) {
+        return getRole(teamId, userId) != null;
+    }
+
     // ========================================================
     // 1. 创建团队 — 团长 role=2, 邀请码=6位随机数
     // ========================================================
@@ -187,7 +191,8 @@ public class TeamService {
     // ========================================================
     // 6. 获取团队成员（含用户名）
     // ========================================================
-    public Result<?> getTeamMembers(Long teamId) {
+    public Result<?> getTeamMembers(Long teamId, Long userId) {
+        if (!isMember(teamId, userId)) return Result.fail("无权查看该团队");
         List<TeamMember> members = teamMemberMapper.selectList(
                 new LambdaQueryWrapper<TeamMember>().eq(TeamMember::getTeamId, teamId));
         List<Map<String, Object>> result = new ArrayList<>();

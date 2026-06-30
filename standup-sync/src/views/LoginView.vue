@@ -19,7 +19,7 @@
           <el-input v-model="loginForm.password" type="password" placeholder="请输入密码" size="large" show-password />
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" size="large" class="login-btn" @click="handleLogin" :loading="loading">
+          <el-button type="primary" size="large" class="login-btn" native-type="submit" :loading="loading">
             登 录
           </el-button>
         </el-form-item>
@@ -40,7 +40,7 @@
           <el-input v-model="regForm.confirm" type="password" placeholder="确认密码" size="large" show-password />
         </el-form-item>
         <el-form-item>
-          <el-button type="success" size="large" class="login-btn" @click="handleRegister" :loading="loading">
+          <el-button type="success" size="large" class="login-btn" native-type="submit" :loading="loading">
             注 册
           </el-button>
         </el-form-item>
@@ -118,7 +118,7 @@ async function handleLogin() {
 async function handleRegister() {
   loading.value = true
   try {
-    const res = await apiPost(`/auth/register?username=${encodeURIComponent(regForm.username)}&password=${encodeURIComponent(regForm.password)}&nickname=${encodeURIComponent(regForm.nickname)}`)
+    const res = await apiPost('/auth/register', { username: regForm.username, password: regForm.password, nickname: regForm.nickname })
     loading.value = false
     if (res.code === 200) {
       ElMessage.success('注册成功，请登录')
@@ -129,15 +129,7 @@ async function handleRegister() {
     }
   } catch (e) {
     loading.value = false
-    // Fallback local register
-    const result = userStore.login(regForm.username, regForm.password)
-    if (result.success) {
-      ElMessage.success('注册成功（离线模式），请登录')
-      activeTab.value = 'login'
-      loginForm.name = regForm.username
-    } else {
-      ElMessage.error('注册失败')
-    }
+    ElMessage.error('无法连接服务器，请确认后端已启动')
   }
 }
 </script>

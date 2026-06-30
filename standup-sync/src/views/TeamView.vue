@@ -40,13 +40,13 @@
               <p v-if="t.createdAt">创建于 {{ formatDate(t.createdAt) }}</p>
             </div>
             <div class="team-card-actions" @click.stop>
-              <el-button link type="primary" size="small" @click="startEditTeam(t)">
+              <el-button v-if="String(t.creatorId) === String(userStore.currentUser?.id)" link type="primary" size="small" @click="startEditTeam(t)">
                 <el-icon><Edit /></el-icon>
               </el-button>
               <el-button link type="warning" size="small" @click="confirmLeaveTeam(t)">
                 退出
               </el-button>
-              <el-button link type="danger" size="small" @click="confirmDeleteTeam(t)">
+              <el-button v-if="String(t.creatorId) === String(userStore.currentUser?.id)" link type="danger" size="small" @click="confirmDeleteTeam(t)">
                 解散
               </el-button>
             </div>
@@ -394,17 +394,35 @@ function handleCreateSprint() {
 }
 
 function startEditTeam(team) {
+  if (!isMaster.value) {
+    ElMessage.error('只有团长可以修改团队名称')
+    return
+  }
   editTarget.value = team
   editTeamName.value = team.name
   showEditDialog.value = true
 }
 
-function handleEditTeam() {
-  if (editTarget.value && editTeamName.value.trim()) {
-    teamStore.updateTeamName(editTarget.value.id, editTeamName.value.trim())
+async function handleEditTeam() {
+  if (!editTarget.value || !editTeamName.value.trim()) return
+  if (editTeamName.value.trim() === editTarget.value.name) {
     showEditDialog.value = false
-    ElMessage.success('团队名称已更新')
+    return
   }
+  try {
+    await ElMessageBox.confirm(
+      `确定将团队名称改为「${editTeamName.value.trim()}」？`,
+      '确认修改',
+      { confirmButtonText: '确认', cancelButtonText: '取消', type: 'warning' }
+    )
+    const result = await teamStore.updateTeamName(editTarget.value.id, editTeamName.value.trim())
+    showEditDialog.value = false
+    if (result && result.success) {
+      ElMessage.success('团队名称已更新')
+    } else {
+      ElMessage.error(result?.message || '更新失败')
+    }
+  } catch { /* cancelled */ }
 }
 
 function confirmLeaveTeam(team) {

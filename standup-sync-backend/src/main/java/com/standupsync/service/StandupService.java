@@ -38,7 +38,14 @@ public class StandupService {
         this.aiService = aiService;
     }
 
-    public Result<?> getStandupList(Long teamId) {
+    private boolean isTeamMember(Long teamId, Long userId) {
+        TeamMember tm = teamMemberMapper.selectOne(new LambdaQueryWrapper<TeamMember>()
+                .eq(TeamMember::getTeamId, teamId).eq(TeamMember::getUserId, userId));
+        return tm != null;
+    }
+
+    public Result<?> getStandupList(Long teamId, Long userId) {
+        if (!isTeamMember(teamId, userId)) return Result.fail("无权查看该团队站会");
         List<StandupMeeting> list = meetingMapper.selectList(
                 new LambdaQueryWrapper<StandupMeeting>().eq(StandupMeeting::getTeamId, teamId)
                         .orderByDesc(StandupMeeting::getMeetingDate));
@@ -137,9 +144,10 @@ public class StandupService {
         return Result.ok("发言已提交");
     }
 
-    public Result<?> getStandupDetail(Long standupId) {
+    public Result<?> getStandupDetail(Long standupId, Long userId) {
         StandupMeeting meeting = meetingMapper.selectById(standupId);
         if (meeting == null) return Result.fail("站会不存在");
+        if (!isTeamMember(meeting.getTeamId(), userId)) return Result.fail("无权查看");
         List<StandupRecord> records = recordMapper.selectList(
                 new LambdaQueryWrapper<StandupRecord>().eq(StandupRecord::getStandupId, standupId)
                         .orderByAsc(StandupRecord::getSpeakOrder));
@@ -178,7 +186,10 @@ public class StandupService {
         return Result.ok("站会已归档");
     }
 
-    public Result<?> pasteChatLog(Long standupId, String text) {
+    public Result<?> pasteChatLog(Long standupId, String text, Long userId) {
+        StandupMeeting meeting = meetingMapper.selectById(standupId);
+        if (meeting == null) return Result.fail("站会不存在");
+        if (!isTeamMember(meeting.getTeamId(), userId)) return Result.fail("无权操作");
         List<Map<String, String>> parsed = parseChatLog(text);
         int count = 0;
         for (Map<String, String> entry : parsed) {
@@ -204,7 +215,10 @@ public class StandupService {
     }
 
     @Transactional
-    public Result<?> generateAISummary(Long standupId) {
+    public Result<?> generateAISummary(Long standupId, Long userId) {
+        StandupMeeting meeting = meetingMapper.selectById(standupId);
+        if (meeting == null) return Result.fail("站会不存在");
+        if (!isTeamMember(meeting.getTeamId(), userId)) return Result.fail("无权操作");
         List<StandupRecord> records = recordMapper.selectList(
                 new LambdaQueryWrapper<StandupRecord>().eq(StandupRecord::getStandupId, standupId));
         if (records.isEmpty()) return Result.fail("没有发言记录");
@@ -237,9 +251,10 @@ public class StandupService {
         }
     }
 
-    public Result<?> getSummary(Long standupId) {
+    public Result<?> getSummary(Long standupId, Long userId) {
         StandupMeeting meeting = meetingMapper.selectById(standupId);
         if (meeting == null) return Result.fail("站会不存在");
+        if (!isTeamMember(meeting.getTeamId(), userId)) return Result.fail("无权查看");
         List<StandupRecord> records = recordMapper.selectList(
                 new LambdaQueryWrapper<StandupRecord>().eq(StandupRecord::getStandupId, standupId));
         List<StandupActionItem> items = actionItemMapper.selectList(
@@ -252,7 +267,7 @@ public class StandupService {
         return Result.ok(summary);
     }
 
-    public Result<?> classifyText(String text) {
+    public Result<?> classifyText(String text, Long userId) {
         // Local keyword classification (instant, no AI API call)
         Map<String, Object> result = new HashMap<>();
         String t = text.toLowerCase();
@@ -280,7 +295,7 @@ public class StandupService {
         return Result.ok(result);
     }
 
-    public Result<?> updateActionItem(Long itemId, String content, String priority, Long assigneeId) {
+    public Result<?> updateActionItem(Long itemId, String content, String priority, Long assigneeId, Long userId) {
         StandupActionItem item = actionItemMapper.selectById(itemId);
         if (item == null) return Result.fail("ActionItem不存在");
         if (content != null) item.setContent(content);

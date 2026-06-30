@@ -1,6 +1,7 @@
 package com.standupsync.controller;
 
 import com.standupsync.dto.LoginDTO;
+import com.standupsync.dto.RegisterDTO;
 import com.standupsync.dto.Result;
 import com.standupsync.service.UserService;
 import org.springframework.security.core.Authentication;
@@ -17,8 +18,8 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public Result<?> register(@RequestParam String username, @RequestParam String password, @RequestParam(required = false) String nickname) {
-        return userService.register(username, password, nickname);
+    public Result<?> register(@RequestBody RegisterDTO dto) {
+        return userService.register(dto.getUsername(), dto.getPassword(), dto.getNickname());
     }
 
     @PostMapping("/login")

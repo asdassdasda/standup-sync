@@ -39,7 +39,6 @@
         <el-avatar :size="42">{{ userStore.currentUser?.name?.charAt(0) || '?' }}</el-avatar>
         <div class="user-info">
           <div class="username">{{ userStore.currentUser?.name || '未登录' }}</div>
-          <div class="role">{{ roleLabel }}</div>
         </div>
       </div>
     </el-aside>
@@ -101,6 +100,10 @@ const roleLabel = computed(() => {
 })
 
 function handleLogout() {
+  // Clear persisted data from other users
+  localStorage.removeItem('team')
+  localStorage.removeItem('standup')
+  localStorage.removeItem('todos')
   userStore.logout()
   ElMessage.success('已退出登录')
   router.push('/login')

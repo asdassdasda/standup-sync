@@ -192,17 +192,19 @@ export const useTeamStore = defineStore('team', () => {
     loading.value = true
     const res = await callApi('GET', '/teams/mine')
     loading.value = false
-    if (res && res.code === 200 && res.data) {
-      teams.value = res.data
+    if (res && res.code === 200) {
+      teams.value = res.data || []
       if (!activeTeamId.value && teams.value.length > 0) {
         activeTeamId.value = teams.value[0].id
       }
-      // Auto-connect team WebSocket for real-time data sync
       if (activeTeamId.value) {
         teamWsService.connect(activeTeamId.value)
+      } else {
+        teamWsService.disconnect()
       }
-      // Fetch pending application counts for badge indicators
-      fetchAllPendingCounts()
+      if (teams.value.length > 0) {
+        fetchAllPendingCounts()
+      }
     }
   }
   // 自检: ✅ 拉取后端团队列表, 自动选中第一个
@@ -401,10 +403,14 @@ export const useTeamStore = defineStore('team', () => {
   // 10. 修改团队名称 — PUT /api/teams/{id}?name=xxx
   // ========================================================
   async function updateTeamName(teamId, name) {
-    await callApi('PUT', `/teams/${teamId}?name=${encodeURIComponent(name)}`)
-    const team = teams.value.find(t => t.id === teamId)
-    if (team) team.name = name
-    broadcast('team', 'teams-changed')
+    const res = await callApi('PUT', `/teams/${teamId}?name=${encodeURIComponent(name)}`)
+    if (res && res.code === 200) {
+      const team = teams.value.find(t => t.id === teamId)
+      if (team) team.name = name
+      broadcast('team', 'teams-changed')
+      return { success: true }
+    }
+    return { success: false, message: res?.msg || '更新失败' }
   }
   // 自检: ✅ 调后端更新, 成功则本地同步
 

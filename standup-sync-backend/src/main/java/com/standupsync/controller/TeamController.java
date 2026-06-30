@@ -41,8 +41,8 @@ public class TeamController {
     }
 
     @GetMapping("/{teamId}/members")
-    public Result<?> members(@PathVariable Long teamId) {
-        return teamService.getTeamMembers(teamId);
+    public Result<?> members(@PathVariable Long teamId, Authentication auth) {
+        return teamService.getTeamMembers(teamId, (Long) auth.getPrincipal());
     }
 
     @PutMapping("/{teamId}/members/{memberId}/role")
