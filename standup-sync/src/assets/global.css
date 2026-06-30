@@ -1,0 +1,26 @@
+/* 顶部导航栏蓝色 */
+.el-header {
+  background-color: #4094ED !important;
+  color: #fff !important;
+}
+/* 侧边栏深色背景 */
+.el-menu-vertical-dark {
+  background-color: #16203E !important;
+}
+.el-aside {
+  background-color: #1A1A2E !important;
+}
+/* 阻碍卡片红色底色 */
+.block-card {
+  background-color: #FFEEEE !important;
+  border: 2px solid #F56C6C !important;
+}
+/* ActionItem黄色卡片 */
+.action-card {
+  background-color: #FFF8CC !important;
+  border: 2px solid #E6A23C !important;
+}
+/* 逾期行标红 */
+.row-overdue {
+  background-color: #FFEBEB !important;
+}

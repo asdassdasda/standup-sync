@@ -1,0 +1,84 @@
+/* ========================================
+   Element Plus 官方暗色模式已在 main.js 引入:
+   element-plus/theme-chalk/dark/css-vars.css
+   通过 html.dark 类名自动切换所有 EP 组件
+
+   本文件仅处理自定义布局元素（侧边栏、顶栏等）
+   ======================================== */
+
+/* ---- 侧边栏（非 Element Plus 组件） ---- */
+.el-aside {
+  background-color: #1A1A2E !important;
+}
+
+html.dark .el-aside {
+  background-color: #0d1117 !important;
+}
+
+/* ---- 顶部蓝条 ---- */
+.el-header {
+  background-color: #4094ED !important;
+  color: #fff !important;
+}
+
+html.dark .el-header {
+  background-color: #1a5299 !important;
+}
+
+/* ---- 侧边栏菜单底色 ---- */
+.el-menu-vertical-dark {
+  background-color: #16203E !important;
+}
+
+html.dark .el-menu-vertical-dark {
+  background-color: #0d1117 !important;
+}
+
+/* ---- logo 底边线 ---- */
+.logo-box {
+  border-bottom: 1px solid #333652;
+}
+
+html.dark .logo-box {
+  border-bottom-color: #30363d;
+}
+
+/* ---- 阻碍卡片（红底） ---- */
+.block-card {
+  background-color: #FFEEEE !important;
+  border: 2px solid #F56C6C !important;
+}
+
+html.dark .block-card {
+  background-color: rgba(245, 108, 108, 0.12) !important;
+  border-color: #F56C6C !important;
+}
+
+/* ---- Action Item 卡片（黄底） ---- */
+.action-card {
+  background-color: #FFF8CC !important;
+  border: 2px solid #E6A23C !important;
+}
+
+html.dark .action-card {
+  background-color: rgba(230, 162, 60, 0.12) !important;
+  border-color: #E6A23C !important;
+}
+
+/* ---- 逾期行标红 ---- */
+.row-overdue {
+  background-color: #FFEBEB !important;
+}
+
+html.dark .row-overdue {
+  background-color: rgba(245, 108, 108, 0.1) !important;
+}
+
+/* ---- 页面底色 ---- */
+html.dark body {
+  background-color: #141414;
+}
+
+html.dark .el-main {
+  background-color: #1a1a1a;
+}

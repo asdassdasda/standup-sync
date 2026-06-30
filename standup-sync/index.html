@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StandupSync</title>
+  <script>
+    // Theme initialization (before page render)
+    (function() {
+      var settings = localStorage.getItem('settings');
+      var theme = 'light';
+      if (settings) {
+        try { theme = JSON.parse(settings).theme || 'light'; } catch(e) {}
+      }
+      if (theme === 'dark') document.documentElement.classList.add('dark');
+    })();
+
+    // Global error catcher - shows errors on page if Vue fails
+    window.__vueErrors = [];
+    window.addEventListener('error', function(e) {
+      window.__vueErrors.push('Error: ' + (e.message || e.error || 'unknown'));
+      var el = document.getElementById('app');
+      if (el) el.innerHTML += '<div style="color:red;padding:10px;margin:10px;border:1px solid red;background:#fff;">Error: ' + (e.message || 'unknown') + '</div>';
+    });
+    window.addEventListener('unhandledrejection', function(e) {
+      window.__vueErrors.push('Rejection: ' + (e.reason || 'unknown'));
+    });
+
+    // Timeout check - if Vue didn't mount within 5s, show a message
+    setTimeout(function() {
+      var el = document.getElementById('app');
+      if (el && (!el.innerHTML || el.innerHTML.trim() === '')) {
+        el.innerHTML = '<div style="padding:40px;text-align:center;"><h2>页面加载中...</h2><p>如果持续白屏，请打开浏览器控制台(F12)查看错误信息</p><p style="color:#999;">StandupSync v1.0</p></div>';
+      }
+    }, 5000);
+  </script>
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
