@@ -49,7 +49,27 @@ public class StandupService {
         List<StandupMeeting> list = meetingMapper.selectList(
                 new LambdaQueryWrapper<StandupMeeting>().eq(StandupMeeting::getTeamId, teamId)
                         .orderByDesc(StandupMeeting::getMeetingDate));
-        return Result.ok(list);
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (StandupMeeting m : list) {
+            List<StandupRecord> records = recordMapper.selectList(
+                    new LambdaQueryWrapper<StandupRecord>().eq(StandupRecord::getStandupId, m.getId()));
+            long total = records.size();
+            long done = records.stream().filter(r -> "done".equals(r.getSpeakStatus())).count();
+            long blockers = records.stream().filter(r -> r.getBlockers() != null && !r.getBlockers().trim().isEmpty()).count();
+            int attRate = total > 0 ? (int)(done * 100 / total) : 0;
+            Map<String, Object> item = new HashMap<>();
+            item.put("id", m.getId()); item.put("teamId", m.getTeamId());
+            item.put("sprint", m.getSprint()); item.put("meetingDate", m.getMeetingDate());
+            item.put("mode", m.getMode()); item.put("status", m.getStatus());
+            item.put("countdownSeconds", m.getCountdownSeconds());
+            item.put("createdBy", m.getCreatedBy()); item.put("createTime", m.getCreateTime());
+            item.put("attendanceRate", attRate);
+            item.put("finishRate", attRate);
+            item.put("blockCount", (int)blockers);
+            item.put("attendance", total > 0 ? done + "/" + total + " (" + attRate + "%)" : "0/0 (0%)");
+            result.add(item);
+        }
+        return Result.ok(result);
     }
 
     @Transactional
