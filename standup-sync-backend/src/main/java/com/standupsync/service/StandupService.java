@@ -141,13 +141,19 @@ public class StandupService {
     public Result<?> submitSpeech(Long standupId, Long userId, SubmitSpeechDTO dto) {
         StandupRecord record = recordMapper.selectOne(new LambdaQueryWrapper<StandupRecord>()
                 .eq(StandupRecord::getStandupId, standupId).eq(StandupRecord::getUserId, userId));
-        if (record == null) return Result.fail("发言记录不存在");
+        if (record == null) {
+            record = new StandupRecord();
+            record.setStandupId(standupId);
+            record.setUserId(userId);
+            record.setSpeakOrder(0);
+        }
         record.setYesterdayWork(dto.getYesterdayWork());
         record.setTodayPlan(dto.getTodayPlan());
         record.setBlockers(dto.getBlockers());
         record.setSpeakStatus("done");
         record.setSubmittedAt(LocalDateTime.now());
-        recordMapper.updateById(record);
+        if (record.getId() == null) recordMapper.insert(record);
+        else recordMapper.updateById(record);
 
         // Broadcast to all members
         try {
