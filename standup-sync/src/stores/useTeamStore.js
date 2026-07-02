@@ -316,14 +316,18 @@ export const useTeamStore = defineStore('team', () => {
   // 4. 删除团队 (Tech Lead) — POST /api/teams/{id}/dissolve
   // ========================================================
   async function deleteTeam(teamId) {
-    await callApi('POST', `/teams/${teamId}/dissolve`)
-    teams.value = teams.value.filter(t => t.id !== teamId)
-    if (activeTeamId.value === teamId) {
-      activeTeamId.value = teams.value[0]?.id || null
+    const res = await callApi('POST', `/teams/${teamId}/dissolve`)
+    if (res && res.code === 200) {
+      teams.value = teams.value.filter(t => t.id !== teamId)
+      if (activeTeamId.value === teamId) {
+        activeTeamId.value = teams.value[0]?.id || null
+      }
+      members.value = []
+      sprints.value = []
+      broadcast('team', 'teams-changed')
+      return { success: true }
     }
-    members.value = []
-    sprints.value = []
-    broadcast('team', 'teams-changed')
+    return { success: false, message: res?.msg || '解散失败' }
   }
   // 自检: ✅ 先调后端解散, 再从本地列表移除, 清理关联数据
 
@@ -332,8 +336,7 @@ export const useTeamStore = defineStore('team', () => {
   // ========================================================
   async function switchTeam(teamId) {
     activeTeamId.value = teamId
-    await loadMembers(teamId)
-    // Connect team WebSocket for real-time data sync
+    await Promise.all([loadMembers(teamId), fetchSprints()])
     teamWsService.connect(teamId)
   }
   // 自检: ✅ 切换时重新加载成员
@@ -429,13 +432,28 @@ export const useTeamStore = defineStore('team', () => {
   // 自检: ✅ 本地移除自己, 切换活跃团队
 
   // ========================================================
-  // 12. 创建 Sprint
+  // 6b. 加载团队迭代 — GET /api/sprints?teamId=xxx
   // ========================================================
-  function createSprint(name, startDate, endDate) {
-    sprints.value.forEach(s => { s.isActive = false })
-    sprints.value.push({ id: generateId('sprint_'), name, startDate, endDate, isActive: true })
+  async function fetchSprints() {
+    const res = await callApi('GET', '/sprints')
+    if (res && res.code === 200 && res.data) {
+      sprints.value = res.data
+    }
   }
-  // 自检: ✅ 纯本地, 旧 Sprint 自动失活
+
+  // ========================================================
+  // 12. 创建 Sprint — POST /api/sprints
+  // ========================================================
+  async function createSprint(name, startDate, endDate) {
+    const sd = startDate instanceof Date ? startDate.toISOString().split('T')[0] : startDate
+    const ed = endDate instanceof Date ? endDate.toISOString().split('T')[0] : endDate
+    const res = await callApi('POST', `/sprints?name=${encodeURIComponent(name)}&startDate=${sd || ''}&endDate=${ed || ''}`)
+    if (res && res.code === 200) {
+      await fetchSprints()
+      return { success: true }
+    }
+    return { success: false, message: res?.msg || '创建失败' }
+  }
 
   // --- helpers ---
   function randCode() { return String(Math.floor(100000 + Math.random() * 900000)) }
@@ -449,19 +467,14 @@ export const useTeamStore = defineStore('team', () => {
     members.value = [{ id: u.currentUser?.id || generateId('m_'), name: u.currentUser?.name || '创始人', role: ROLES.MASTER, joinedAt: new Date().toISOString(), isActive: true }]
   }
 
-  function localMember() {
-    const u = useUserStore()
-    return { id: u.currentUser?.id || generateId('m_'), name: u.currentUser?.name || '新成员', role: ROLES.MEMBER, joinedAt: new Date().toISOString(), isActive: true }
-  }
-
   return {
     teams, activeTeamId, members, sprints, loading,
     currentTeam, activeMembers, activeSprint, sprintOptions, applications, pendingAppsByTeam, totalPendingCount,
     fetchMyTeams, createTeam, applyToJoin, deleteTeam, switchTeam,
-    loadMembers, removeMember, changeMemberRole, regenerateInviteCode,
+    loadMembers, fetchSprints, removeMember, changeMemberRole, regenerateInviteCode,
     updateTeamName, leaveTeam, createSprint,
     fetchApplications, approveApplication, rejectApplication, fetchAllPendingCounts
   }
 }, {
-  persist: { key: 'team', pick: ['teams', 'activeTeamId', 'sprints'] }
+  persist: { key: 'team', pick: ['teams', 'activeTeamId'] }
 })

@@ -267,7 +267,10 @@ public class StandupService {
         return Result.ok(summary);
     }
 
-    public Result<?> classifyText(String text, Long userId) {
+    public Result<?> classifyText(Long standupId, String text, Long userId) {
+        StandupMeeting meeting = meetingMapper.selectById(standupId);
+        if (meeting == null) return Result.fail("站会不存在");
+        if (!isTeamMember(meeting.getTeamId(), userId)) return Result.fail("无权操作");
         // Local keyword classification (instant, no AI API call)
         Map<String, Object> result = new HashMap<>();
         String t = text.toLowerCase();

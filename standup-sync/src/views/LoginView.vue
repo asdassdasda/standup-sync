@@ -87,14 +87,22 @@ const regRules = {
   ]
 }
 
+const formRef = ref(null)
+const regFormRef = ref(null)
+
 async function handleLogin() {
+  try {
+    await formRef.value.validate()
+  } catch {
+    return
+  }
   loading.value = true
   try {
     const res = await apiPost('/auth/login', { username: loginForm.name, password: loginForm.password })
     loading.value = false
     if (res.code === 200) {
       const d = res.data
-      const currentUser = { id: String(d.userId), name: loginForm.name, role: 0 }
+      const currentUser = { id: String(d.userId), name: d.nickname || loginForm.name }
       const authToken = d.token
       sessionStorage.setItem('user', JSON.stringify({ currentUser, authToken }))
       userStore.$patch({ currentUser, authToken })
@@ -116,6 +124,11 @@ async function handleLogin() {
 }
 
 async function handleRegister() {
+  try {
+    await regFormRef.value.validate()
+  } catch {
+    return
+  }
   loading.value = true
   try {
     const res = await apiPost('/auth/register', { username: regForm.username, password: regForm.password, nickname: regForm.nickname })

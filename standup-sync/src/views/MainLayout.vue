@@ -76,11 +76,10 @@
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue'
+import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/useUserStore'
 import { useTeamStore } from '../stores/useTeamStore'
-import { ROLE_LABELS } from '../utils/constants'
 import { ElMessage } from 'element-plus'
 
 const router = useRouter()
@@ -93,10 +92,6 @@ onMounted(() => {
       teamStore.fetchAllPendingCounts()
     })
   }
-})
-
-const roleLabel = computed(() => {
-  return ROLE_LABELS[userStore.currentUser?.role] || ''
 })
 
 function handleLogout() {

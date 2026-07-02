@@ -9,4 +9,5 @@ public class TodoCreateDTO {
     private String priority;
     private LocalDateTime deadline;
     private Long sourceStandupId;
+    private Long sprintId;
 }

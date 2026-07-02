@@ -14,6 +14,8 @@ public class TodoItem {
     private Long assigneeId;
     private Long assignerId;
     private Long sourceStandupId;
+    private Long sprintId;
+    private Long transferToUserId;
     private String priority;
     private String status;
     private LocalDateTime deadline;

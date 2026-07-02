@@ -2,9 +2,8 @@
   <div>
     <!-- Filter bar -->
     <div class="filter-bar">
-      <el-select v-model="dashStore.filters.sprintId" style="width: 140px;">
-        <el-option label="Sprint#12" value="sprint_1" />
-        <el-option label="Sprint#13" value="sprint_13" />
+      <el-select v-model="dashStore.filters.sprintId" style="width: 140px;" placeholder="选择Sprint" @change="dashStore.fetchDashboardData()">
+        <el-option v-for="s in teamStore.sprints" :key="s.id" :label="s.name" :value="s.id" />
       </el-select>
       <el-button>[阻碍类型]</el-button>
       <el-button>[成员]</el-button>
@@ -114,12 +113,18 @@ import { ScatterChart, PieChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import { useDashboardStore } from '../stores/useDashboardStore'
+import { useTeamStore } from '../stores/useTeamStore'
 
 use([ScatterChart, PieChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer])
 
 const dashStore = useDashboardStore()
+const teamStore = useTeamStore()
 
-onMounted(() => {
+onMounted(async () => {
+  await teamStore.fetchMyTeams()
+  if (teamStore.currentTeam?.id) {
+    await teamStore.fetchSprints()
+  }
   dashStore.fetchDashboardData()
 })
 </script>

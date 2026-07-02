@@ -1,9 +1,18 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { WS_MSG } from '../utils/constants'
+import { teamWsService } from '../services/websocket/teamWsService'
+
+async function callApi(url) {
+  try {
+    const { apiGet } = await import('../services/api/index.js')
+    return await apiGet(url)
+  } catch { return null }
+}
 
 export const useDashboardStore = defineStore('dashboard', () => {
   const filters = ref({
-    sprintId: 'sprint_1',
+    sprintId: null,
     memberId: null,
     dateRange: null,
     crossTeam: false
@@ -11,106 +20,105 @@ export const useDashboardStore = defineStore('dashboard', () => {
   const loading = ref(false)
 
   const kpiData = ref({
-    standupCount: { current: 12, previous: 10, trend: 'up' },
-    attendanceRate: { current: 87, previous: 90, trend: 'down' },
-    completionRate: { current: 73, previous: 58, trend: 'up' },
-    activeBlockers: { current: 3, previous: 4, trend: 'down' }
+    standupCount: { current: 0, previous: 0, trend: 'up' },
+    attendanceRate: { current: 0, previous: 0, trend: 'up' },
+    completionRate: { current: 0, previous: 0, trend: 'up' },
+    activeBlockers: { current: 0, previous: 0, trend: 'down' }
   })
 
-  const attendanceTrend = ref([
-    { date: '6/1', value: 60 },
-    { date: '6/1', value: 80 },
-    { date: '6/5', value: 70 },
-    { date: '6/5', value: 90 },
-    { date: '6/5', value: 60 },
-    { date: '6/9', value: 80 },
-    { date: '6/9', value: 90 }
-  ])
+  const attendanceTrend = ref([])
+  const completionTrend = ref([])
+  const blockerDistribution = ref([])
+  const memberRanking = ref([])
 
-  const completionTrend = ref([
-    { date: '6/1', value: 50 },
-    { date: '6/1', value: 75 },
-    { date: '6/5', value: 60 },
-    { date: '6/5', value: 80 },
-    { date: '6/9', value: 70 },
-    { date: '6/9', value: 90 }
-  ])
+  const attendanceChartOption = computed(() => {
+    const data = attendanceTrend.value && attendanceTrend.value.length
+      ? attendanceTrend.value.map(d => [d.date, d.value])
+      : [['暂无', 0]]
+    const dates = data.map(d => d[0])
+    return {
+      xAxis: { type: 'category', data: dates, name: '日期' },
+      yAxis: { type: 'value', name: '出勤率 (%)', max: 100 },
+      tooltip: { trigger: 'item', formatter: '{c}%' },
+      series: [{ type: 'scatter', data, symbolSize: 12, itemStyle: { color: '#4094ED' } }]
+    }
+  })
 
-  const blockerDistribution = ref([
-    { name: '技术问题', value: 45 },
-    { name: '资源问题', value: 30 },
-    { name: '沟通问题', value: 15 }
-  ])
+  const completionChartOption = computed(() => {
+    const data = completionTrend.value && completionTrend.value.length
+      ? completionTrend.value.map(d => [d.date, d.value])
+      : [['暂无', 0]]
+    const dates = data.map(d => d[0])
+    return {
+      xAxis: { type: 'category', data: dates, name: '日期' },
+      yAxis: { type: 'value', name: '完成率 (%)', max: 100 },
+      tooltip: { trigger: 'item', formatter: '{c}%' },
+      series: [{ type: 'scatter', data, symbolSize: 12, itemStyle: { color: '#67C23A' } }]
+    }
+  })
 
-  const memberRanking = ref([
-    { name: '张三', doneCount: 12, completionRate: 92, medal: 'gold' },
-    { name: '李四', doneCount: 8, completionRate: 75, medal: 'silver' },
-    { name: '王五', doneCount: 5, completionRate: 60, medal: 'bronze' },
-    { name: '赵六', doneCount: 3, completionRate: 45, medal: null },
-    { name: '钱七', doneCount: 1, completionRate: 20, medal: null }
-  ])
-
-  // ECharts options
-  const attendanceChartOption = computed(() => ({
-    xAxis: {
-      type: 'category',
-      data: ['6/1', '6/5', '6/9'],
-      name: '日期'
-    },
-    yAxis: {
-      type: 'value',
-      name: '出勤率 (%)',
-      max: 100
-    },
-    tooltip: { trigger: 'item', formatter: '{c}%' },
-    series: [{
-      type: 'scatter',
-      data: attendanceTrend.value.map(d => [d.date, d.value]),
-      symbolSize: 12,
-      itemStyle: { color: '#4094ED' }
-    }]
-  }))
-
-  const completionChartOption = computed(() => ({
-    xAxis: {
-      type: 'category',
-      data: ['6/1', '6/5', '6/9'],
-      name: '日期'
-    },
-    yAxis: {
-      type: 'value',
-      name: '完成率 (%)',
-      max: 100
-    },
-    tooltip: { trigger: 'item', formatter: '{c}%' },
-    series: [{
-      type: 'scatter',
-      data: completionTrend.value.map(d => [d.date, d.value]),
-      symbolSize: 12,
-      itemStyle: { color: '#67C23A' }
-    }]
-  }))
-
-  const pieChartOption = computed(() => ({
-    tooltip: { trigger: 'item' },
-    legend: { bottom: '0%' },
-    series: [{
-      type: 'pie',
-      radius: ['40%', '70%'],
-      center: ['50%', '45%'],
-      label: { formatter: '{b}\n{d}%' },
-      data: blockerDistribution.value,
-      itemStyle: { borderRadius: 4, borderColor: '#fff', borderWidth: 2 }
-    }]
-  }))
+  const pieChartOption = computed(() => {
+    const data = blockerDistribution.value && blockerDistribution.value.length
+      ? blockerDistribution.value
+      : [{ name: '暂无数据', value: 1 }]
+    return {
+      tooltip: { trigger: 'item' },
+      legend: { bottom: '0%' },
+      series: [{ type: 'pie', radius: ['40%', '70%'], center: ['50%', '45%'],
+        label: { formatter: '{b}\n{d}%' }, data,
+        itemStyle: { borderRadius: 4, borderColor: '#fff', borderWidth: 2 } }]
+    }
+  })
 
   const topThreeMembers = computed(() => {
     return memberRanking.value.filter(m => m.medal)
   })
 
-  function fetchDashboardData() {
+  async function fetchDashboardData() {
+    if (loading.value) return
     loading.value = true
-    setTimeout(() => { loading.value = false }, 300)
+    try {
+      const { useTeamStore } = await import('./useTeamStore.js')
+      const ts = useTeamStore()
+      const teamId = ts.currentTeam?.id || 0
+
+      const sprintId = filters.value.sprintId
+      const sprint = sprintId ? ts.sprints.find(s => s.id === sprintId) : null
+      // NOTE: The backend sprint filter matches by sprint name (standup_meeting.sprint column),
+      // not by sprint ID. This means multiple sprints with the same name would produce the same
+      // results. This is intentional — the backend stores sprint as a denormalized name string.
+      const sprintName = sprint ? sprint.name : ''
+      const sprintParam = sprintName ? `&sprintId=${encodeURIComponent(sprintName)}` : ''
+
+      const [kpiRes, trendsRes, rankingRes] = await Promise.all([
+        callApi(`/dashboard/kpi?teamId=${teamId}${sprintParam}`),
+        callApi(`/dashboard/trends?teamId=${teamId}${sprintParam}`),
+        callApi(`/dashboard/ranking?teamId=${teamId}`)
+      ])
+
+      if (kpiRes && kpiRes.code === 200 && kpiRes.data) {
+        const d = kpiRes.data
+        kpiData.value = {
+          standupCount: typeof d.standupCount === 'object' ? d.standupCount : { current: d.standupCount || 0, previous: 0, trend: 'up' },
+          attendanceRate: typeof d.attendanceRate === 'object' ? d.attendanceRate : { current: d.attendanceRate || 0, previous: 0, trend: 'up' },
+          completionRate: typeof d.completionRate === 'object' ? d.completionRate : { current: d.completionRate || 0, previous: 0, trend: 'up' },
+          activeBlockers: typeof d.activeBlockers === 'object' ? d.activeBlockers : { current: d.activeBlockers || 0, previous: 0, trend: 'down' }
+        }
+      }
+      if (trendsRes && trendsRes.code === 200 && trendsRes.data) {
+        const td = trendsRes.data
+        attendanceTrend.value = (td.attendanceTrend || []).map(d => ({ date: d.date?.substring(5) || d.date, value: d.value }))
+        completionTrend.value = (td.completionTrend || []).map(d => ({ date: d.date?.substring(5) || d.date, value: d.value }))
+        blockerDistribution.value = td.blockerDistribution || []
+      }
+      if (rankingRes && rankingRes.code === 200 && rankingRes.data) {
+        memberRanking.value = (rankingRes.data || []).map((r, i) => ({
+          ...r,
+          medal: i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : null
+        }))
+      }
+    } catch { /* keep current data */ }
+    loading.value = false
   }
 
   function updateFilters(newFilters) {
@@ -124,11 +132,16 @@ export const useDashboardStore = defineStore('dashboard', () => {
     const blob = new Blob(['﻿' + header + rows], { type: 'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
-    link.href = url
-    link.download = 'dashboard-data.csv'
-    link.click()
+    link.href = url; link.download = 'dashboard-data.csv'; link.click()
     URL.revokeObjectURL(url)
   }
+
+  let _unsub = null
+  function _listen() {
+    if (_unsub) _unsub()
+    _unsub = teamWsService.on(WS_MSG.STANDUP_LIST_CHANGED, () => { fetchDashboardData() })
+  }
+  _listen()
 
   return {
     filters, loading, kpiData,

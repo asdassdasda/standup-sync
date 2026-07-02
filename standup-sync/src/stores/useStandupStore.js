@@ -191,10 +191,10 @@ export const useStandupStore = defineStore('standup', () => {
               sprintName: item.sprint || old.sprintName || '',
               date: item.meetingDate || item.date || old.date || '',
               time: old.time || timeStr,
-              attendance: old.attendance || item.attendance || '',
-              attendanceRate: old.attendanceRate != null ? old.attendanceRate : (item.attendanceRate || 0),
-              finishRate: old.finishRate != null ? old.finishRate : (item.finishRate || 0),
-              blockCount: old.blockCount != null ? old.blockCount : (item.blockCount || 0)
+              attendance: item.attendance || old.attendance || '',
+              attendanceRate: item.attendanceRate != null ? item.attendanceRate : (old.attendanceRate || 0),
+              finishRate: item.finishRate != null ? item.finishRate : (old.finishRate || 0),
+              blockCount: item.blockCount != null ? item.blockCount : (old.blockCount || 0)
             }
           })
           // Sync activeMeetings with backend: remove archived/finished, seed today's active ones
@@ -206,12 +206,13 @@ export const useStandupStore = defineStore('standup', () => {
               delete activeMeetings.value[mid]
             }
           })
-          // Seed activeMeetings from backend for today's non-archived standups
+          // Seed activeMeetings from backend for today's non-archived/non-completed standups
           const todayStr = new Date().toISOString().split('T')[0]
           res.data.forEach(item => {
             const sid = String(item.id)
             const itemDate = item.meetingDate || (item.createTime ? item.createTime.split('T')[0] : '')
-            if (item.status !== 'archived' && itemDate === todayStr && !activeMeetings.value[sid]) {
+            const isFinished = item.status === 'completed' || item.status === 'finished' || item.status === 'archived'
+            if (!isFinished && itemDate === todayStr && !activeMeetings.value[sid]) {
               activeMeetings.value[sid] = {
                 id: item.id,
                 sprintId: null,

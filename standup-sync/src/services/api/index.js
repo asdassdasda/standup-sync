@@ -46,6 +46,10 @@ export async function apiPut(url, data) {
   return data != null ? apiClient.put(url, data) : apiClient.put(url)
 }
 
+export async function apiPatch(url, data) {
+  return data != null ? apiClient.patch(url, data) : apiClient.patch(url)
+}
+
 export async function apiDelete(url) {
   return apiClient.delete(url)
 }

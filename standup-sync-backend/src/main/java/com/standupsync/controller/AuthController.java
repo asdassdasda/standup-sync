@@ -34,6 +34,9 @@ public class AuthController {
 
     @PostMapping("/logout")
     public Result<?> logout(Authentication auth, @RequestHeader("Authorization") String header) {
+        if (header == null || header.length() < 7) {
+            return Result.fail("无效的Authorization头");
+        }
         String token = header.substring(7);
         return userService.logout((Long) auth.getPrincipal(), token);
     }

@@ -19,13 +19,20 @@ public class TodoService {
 
     private final TodoItemMapper todoMapper;
     private final StandupActionItemMapper actionItemMapper;
+    private final StandupMeetingMapper meetingMapper;
+    private final TeamMemberMapper teamMemberMapper;
+    private final UserMapper userMapper;
     private final StandupWebSocketHandler wsHandler;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public TodoService(TodoItemMapper todoMapper, StandupActionItemMapper actionItemMapper,
-                       StandupWebSocketHandler wsHandler) {
+                       StandupMeetingMapper meetingMapper, TeamMemberMapper teamMemberMapper,
+                       UserMapper userMapper, StandupWebSocketHandler wsHandler) {
         this.todoMapper = todoMapper;
         this.actionItemMapper = actionItemMapper;
+        this.meetingMapper = meetingMapper;
+        this.teamMemberMapper = teamMemberMapper;
+        this.userMapper = userMapper;
         this.wsHandler = wsHandler;
     }
 
@@ -47,8 +54,48 @@ public class TodoService {
     }
 
     public Result<?> getTodos(Long teamId, Long userId) {
-        List<TodoItem> todos = todoMapper.findByTeam(teamId);
+        List<TodoItem> allTodos = todoMapper.findByTeam(teamId);
+        // 团长看到全部，非团长只看自己的
+        TeamMember tm = teamMemberMapper.selectOne(new LambdaQueryWrapper<TeamMember>()
+                .eq(TeamMember::getTeamId, teamId).eq(TeamMember::getUserId, userId));
+        boolean isMaster = tm != null && tm.getRole() != null && tm.getRole() == 2;
+        List<TodoItem> todos = new ArrayList<>();
+        for (TodoItem t : allTodos) {
+            if (isMaster || (t.getAssigneeId() != null && t.getAssigneeId().equals(userId))) {
+                todos.add(t);
+            }
+        }
         return Result.ok(todos);
+    }
+
+    /** 获取当前用户所有团队的待办（团长看全团，团员看自己） */
+    public Result<?> getMyTodos(Long userId) {
+        List<TeamMember> memberships = teamMemberMapper.selectList(
+                new LambdaQueryWrapper<TeamMember>().eq(TeamMember::getUserId, userId));
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (TeamMember tm : memberships) {
+            List<TodoItem> teamTodos = todoMapper.findByTeam(tm.getTeamId());
+            boolean isMaster = tm.getRole() != null && tm.getRole() == 2;
+            for (TodoItem t : teamTodos) {
+                if (isMaster || (t.getAssigneeId() != null && t.getAssigneeId().equals(userId))) {
+                    User assignee = t.getAssigneeId() != null ? userMapper.selectById(t.getAssigneeId()) : null;
+                    User assigner = t.getAssignerId() != null ? userMapper.selectById(t.getAssignerId()) : null;
+                    Map<String, Object> map = new HashMap<>();
+                    map.put("id", t.getId()); map.put("teamId", t.getTeamId());
+                    map.put("content", t.getContent()); map.put("assigneeId", t.getAssigneeId());
+                    map.put("assigneeName", assignee != null ? assignee.getNickname() : null);
+                    map.put("assignerId", t.getAssignerId());
+                    map.put("assignerName", assigner != null ? assigner.getNickname() : null);
+                    map.put("priority", t.getPriority());
+                    map.put("status", t.getStatus()); map.put("deadline", t.getDeadline());
+                    map.put("sprintId", t.getSprintId()); map.put("isOverdue", t.getIsOverdue());
+                    map.put("sourceStandupId", t.getSourceStandupId());
+                    map.put("completedAt", t.getCompletedAt()); map.put("createTime", t.getCreateTime());
+                    result.add(map);
+                }
+            }
+        }
+        return Result.ok(result);
     }
 
     @Transactional
@@ -62,17 +109,31 @@ public class TodoService {
         todo.setStatus("pending");
         todo.setDeadline(dto.getDeadline());
         todo.setSourceStandupId(dto.getSourceStandupId());
+        todo.setSprintId(dto.getSprintId());
         todoMapper.insert(todo);
         broadcastTeam(dto.getTeamId(), "todo:created", todo);
+        if (dto.getAssigneeId() != null && !dto.getAssigneeId().equals(assignerId)) {
+            broadcastTeam(dto.getTeamId(), "todo:assigned",
+                _m("teamId", dto.getTeamId(), "todoId", todo.getId(), "assigneeId", dto.getAssigneeId(), "assignerId", assignerId));
+        }
         return Result.ok("待办已创建", todo);
     }
 
     public Result<?> updateStatus(Long todoId, String status, Long userId) {
         TodoItem todo = todoMapper.selectById(todoId);
         if (todo == null) return Result.fail("待办不存在");
+        // Permission check: caller must be assignee or a member of the todo's team
+        if (!todo.getAssigneeId().equals(userId)) {
+            TeamMember tm = teamMemberMapper.selectOne(new LambdaQueryWrapper<TeamMember>()
+                    .eq(TeamMember::getTeamId, todo.getTeamId()).eq(TeamMember::getUserId, userId));
+            if (tm == null) return Result.fail("无权修改此待办状态");
+        }
         todo.setStatus(status);
         if ("done".equals(status)) todo.setCompletedAt(LocalDateTime.now());
         todoMapper.updateById(todo);
+        broadcastTeam(todo.getTeamId(), "todo:status-changed",
+            _m("teamId", todo.getTeamId(), "todoId", todoId, "content", todo.getContent(),
+               "newStatus", status, "operatorId", userId, "operatorName", "用户" + userId));
         broadcastTeam(todo.getTeamId(), "todo:updated", _m("id", todoId, "status", status));
         return Result.ok("状态已更新");
     }
@@ -82,16 +143,50 @@ public class TodoService {
         return Result.ok(list);
     }
 
+    /** 发起转交请求 */
+    public Result<?> requestTransfer(Long todoId, Long newAssigneeId, Long userId) {
+        TodoItem todo = todoMapper.selectById(todoId);
+        if (todo == null) return Result.fail("待办不存在");
+        todo.setTransferToUserId(newAssigneeId);
+        todoMapper.updateById(todo);
+        broadcastTeam(todo.getTeamId(), "todo:transfer-requested",
+            _m("teamId", todo.getTeamId(), "todoId", todoId, "content", todo.getContent(), "fromUserId", userId, "toUserId", newAssigneeId));
+        return Result.ok("转交申请已提交，等待团长审批");
+    }
+
+    /** 团长审批转交 */
     @Transactional
-    public Result<?> generateFromActionItems(Long standupId) {
+    public Result<?> approveTransfer(Long todoId, Long userId) {
+        TodoItem todo = todoMapper.selectById(todoId);
+        if (todo == null) return Result.fail("待办不存在");
+        if (todo.getTransferToUserId() == null) return Result.fail("没有待审批的转交请求");
+        boolean isMaster = false;
+        TeamMember tm = teamMemberMapper.selectOne(new LambdaQueryWrapper<TeamMember>()
+                .eq(TeamMember::getTeamId, todo.getTeamId()).eq(TeamMember::getUserId, userId));
+        if (tm != null && tm.getRole() != null && tm.getRole() == 2) isMaster = true;
+        if (!isMaster) return Result.fail("只有团长可以审批转交");
+        Long oldAssigneeId = todo.getAssigneeId();
+        todo.setAssigneeId(todo.getTransferToUserId());
+        todo.setTransferToUserId(null);
+        todoMapper.updateById(todo);
+        broadcastTeam(todo.getTeamId(), "todo:transfer-approved",
+            _m("teamId", todo.getTeamId(), "todoId", todoId, "content", todo.getContent(),
+               "oldAssigneeId", oldAssigneeId, "newAssigneeId", todo.getAssigneeId()));
+        return Result.ok("转交成功");
+    }
+
+    @Transactional
+    public Result<?> generateFromActionItems(Long standupId, Long userId) {
+        StandupMeeting meeting = meetingMapper.selectById(standupId);
+        if (meeting == null) return Result.fail("站会不存在");
         List<StandupActionItem> items = actionItemMapper.selectList(
                 new LambdaQueryWrapper<StandupActionItem>().eq(StandupActionItem::getStandupId, standupId)
                         .eq(StandupActionItem::getIsTodoGenerated, 0));
         int count = 0;
         for (StandupActionItem item : items) {
             TodoItem todo = new TodoItem();
-            // Get teamId from standup meeting
-            todo.setTeamId(1L); // Simplified
+            todo.setTeamId(meeting.getTeamId());
+            todo.setAssignerId(userId);
             todo.setContent(item.getContent());
             todo.setAssigneeId(item.getAssigneeId());
             todo.setPriority(item.getPriority());

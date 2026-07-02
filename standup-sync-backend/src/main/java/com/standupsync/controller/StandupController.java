@@ -75,6 +75,6 @@ public class StandupController {
     public Result<?> classifyText(@PathVariable Long id, @RequestBody Map<String, String> body, Authentication auth) {
         String text = body.get("text");
         if (text == null || text.trim().isEmpty()) return Result.fail("文本为空");
-        return standupService.classifyText(text, (Long) auth.getPrincipal());
+        return standupService.classifyText(id, text, (Long) auth.getPrincipal());
     }
 }

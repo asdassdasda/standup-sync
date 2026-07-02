@@ -21,6 +21,11 @@ public class TodoController {
         return todoService.getTodos(teamId, (Long) auth.getPrincipal());
     }
 
+    @GetMapping("/mine")
+    public Result<?> mine(Authentication auth) {
+        return todoService.getMyTodos((Long) auth.getPrincipal());
+    }
+
     @PostMapping
     public Result<?> create(@RequestBody TodoCreateDTO dto, Authentication auth) {
         return todoService.createTodo(dto, (Long) auth.getPrincipal());
@@ -36,8 +41,18 @@ public class TodoController {
         return todoService.getUnfinishedTodos((Long) auth.getPrincipal());
     }
 
+    @PostMapping("/{id}/transfer")
+    public Result<?> requestTransfer(@PathVariable Long id, @RequestParam Long newAssigneeId, Authentication auth) {
+        return todoService.requestTransfer(id, newAssigneeId, (Long) auth.getPrincipal());
+    }
+
+    @PostMapping("/{id}/transfer/approve")
+    public Result<?> approveTransfer(@PathVariable Long id, Authentication auth) {
+        return todoService.approveTransfer(id, (Long) auth.getPrincipal());
+    }
+
     @PostMapping("/generate/{standupId}")
-    public Result<?> generateFromAI(@PathVariable Long standupId) {
-        return todoService.generateFromActionItems(standupId);
+    public Result<?> generateFromAI(@PathVariable Long standupId, Authentication auth) {
+        return todoService.generateFromActionItems(standupId, (Long) auth.getPrincipal());
     }
 }

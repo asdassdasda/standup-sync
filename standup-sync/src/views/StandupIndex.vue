@@ -270,10 +270,8 @@ async function handleCreate() {
     ElMessage.warning('请选择所属团队')
     return
   }
-  // Switch to selected team to load its members
+  // Switch to selected team to load its members (loadMembers is already awaited inside switchTeam)
   await teamStore.switchTeam(newStandup.teamId)
-  // Wait for members to load
-  await new Promise(r => setTimeout(r, 500))
   // Check permission against the selected team
   const uid = userStore.currentUser?.id
   const myRole = teamStore.activeMembers.find(m =>
@@ -315,10 +313,11 @@ async function handlePaste() {
   // Pre-fill speeches from parsed chat - match names to members
   parsed.forEach(entry => {
     const member = members.find(m => m.name === entry.name)
-    if (member && standupStore.currentMeeting.memberStatuses[member.id]) {
-      standupStore.currentMeeting.memberStatuses[member.id].yesterday = entry.content
-      standupStore.currentMeeting.memberStatuses[member.id].status = 'done'
-      standupStore.currentMeeting.memberStatuses[member.id].submittedAt = new Date().toISOString()
+    const memberKey = member ? (member.userId || member.id) : null
+    if (memberKey && standupStore.currentMeeting.memberStatuses[memberKey]) {
+      standupStore.currentMeeting.memberStatuses[memberKey].yesterday = entry.content
+      standupStore.currentMeeting.memberStatuses[memberKey].status = 'done'
+      standupStore.currentMeeting.memberStatuses[memberKey].submittedAt = new Date().toISOString()
     }
   })
 

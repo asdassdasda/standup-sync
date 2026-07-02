@@ -137,8 +137,8 @@
           </el-table-column>
           <el-table-column label="状态" width="120">
             <template #default="scope">
-              <el-tag :type="scope.row.isActive ? 'success' : 'info'">
-                {{ scope.row.isActive ? '进行中' : '已结束' }}
+              <el-tag :type="sprintIsActive(scope.row) ? 'success' : 'info'">
+                {{ sprintIsActive(scope.row) ? '进行中' : '已结束' }}
               </el-tag>
             </template>
           </el-table-column>
@@ -309,7 +309,7 @@ const roleOptions = Object.entries(ROLES).map(([key, value]) => ({
 
 const inviteLink = computed(() => {
   const code = teamStore.currentTeam?.inviteCode || ''
-  return `${window.location.origin}/join?code=${code}`
+  return `${window.location.origin}/team?code=${code}`
 })
 
 function getRoleLabel(role) {
@@ -382,14 +382,24 @@ function copyInviteCode() {
   })
 }
 
-function handleCreateSprint() {
-  if (newSprint.name && newSprint.startDate && newSprint.endDate) {
-    teamStore.createSprint(newSprint.name, newSprint.startDate, newSprint.endDate)
+function sprintIsActive(sprint) {
+  if (!sprint || !sprint.endDate) return false
+  return new Date(sprint.endDate) >= new Date()
+}
+
+async function handleCreateSprint() {
+  if (!newSprint.name) { ElMessage.warning('请输入 Sprint 名称'); return }
+  if (!newSprint.startDate) { ElMessage.warning('请选择开始日期'); return }
+  if (!newSprint.endDate) { ElMessage.warning('请选择结束日期'); return }
+  const result = await teamStore.createSprint(newSprint.name, newSprint.startDate, newSprint.endDate)
+  if (result && result.success) {
     showSprintDialog.value = false
     newSprint.name = ''
     newSprint.startDate = null
     newSprint.endDate = null
     ElMessage.success('Sprint 创建成功')
+  } else {
+    ElMessage.error(result?.message || '创建失败')
   }
 }
 
